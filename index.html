@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HostelChef</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:#fff7ed; color:#3b2a1a;
+         min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .screen { display:none; width:100%; max-width:560px; padding:24px; text-align:center;
+            animation: pop .5s ease; }
+  .screen.active { display:block; }
+  @keyframes pop { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+  @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-14px); } }
+  .big-emoji { font-size:5rem; display:inline-block; animation: bounce 1.4s infinite; }
+  h1 { font-size:2rem; margin:10px 0; color:#ea580c; }
+  h2 { margin:6px 0 18px; }
+  .quote { font-size:1.2rem; line-height:1.6; }
+  .choices { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-top:20px; }
+  .choice { flex:1; min-width:180px; background:#fff; border:3px solid #fdba74; border-radius:20px;
+            padding:28px 12px; font-size:1.3rem; cursor:pointer; transition:.2s; }
+  .choice:hover { transform:scale(1.05); border-color:#ea580c; }
+  .choice span { display:block; font-size:3rem; margin-bottom:8px; }
+  .row { display:flex; gap:8px; }
+  input { flex:1; padding:14px; border-radius:14px; border:2px solid #fdba74; font-size:1rem; outline:none; }
+  input:focus { border-color:#ea580c; }
+  button.main { background:#ea580c; color:#fff; border:none; border-radius:14px; padding:14px 20px;
+                font-size:1rem; cursor:pointer; }
+  button.main:disabled { opacity:.45; cursor:not-allowed; }
+  .big { width:100%; margin-top:18px; font-size:1.1rem; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:16px; min-height:40px; }
+  .chip { background:#ffedd5; border-radius:999px; padding:8px 14px; font-size:.95rem; }
+  .chip b { cursor:pointer; margin-left:8px; color:#ea580c; }
+  .hint { color:#9a6b3f; font-size:.9rem; margin-top:10px; }
+  .card { background:#fff; border-radius:20px; padding:22px; text-align:left;
+          box-shadow:0 6px 20px rgba(234,88,12,.15); }
+  .badge { display:inline-block; background:#ea580c; color:#fff; border-radius:999px;
+           padding:6px 14px; font-size:.9rem; margin-bottom:8px; }
+  .card h3 { margin:10px 0 6px; color:#ea580c; }
+  .card li { margin:6px 0; line-height:1.5; }
+  .enjoy { text-align:center; font-size:1.5rem; margin-top:18px; font-weight:bold; }
+  .error { color:#dc2626; margin-top:12px; }
+  .loader { font-size:1.2rem; }
+  .link { background:none; border:none; color:#ea580c; text-decoration:underline; cursor:pointer;
+          margin-top:14px; font-size:1rem; }
+</style>
+</head>
+<body>
+
+<!-- Screen 1: Welcome (moves on by itself after a few seconds) -->
+<div class="screen active" id="s-welcome">
+  <div class="big-emoji">🍳</div>
+  <h1>HostelChef</h1>
+  <p class="quote">Oh! Hungry? 😋<br>No worries buddy, I am here to help you!</p>
+</div>
+
+<!-- Screen 2: Veg or Non-veg -->
+<div class="screen" id="s-diet">
+  <h2>What are you in the mood for?</h2>
+  <div class="choices">
+    <div class="choice" onclick="chooseDiet('veg')"><span>🥦</span>Veg</div>
+    <div class="choice" onclick="chooseDiet('non-veg')"><span>🍗</span>Non-Veg</div>
+  </div>
+</div>
+
+<!-- Screen 3: Ingredients, added one by one -->
+<div class="screen" id="s-ingredients">
+  <h2>What ingredients do you have?</h2>
+  <div class="row">
+    <input id="ing" placeholder="Type one ingredient, e.g. rice" maxlength="40">
+    <button class="main" onclick="addIngredient()">Add</button>
+  </div>
+  <div class="hint">Add them one by one, in the order you like.</div>
+  <div class="chips" id="chips"></div>
+  <button class="main big" id="goBtn" onclick="getRecipe()" disabled>Get my recipe 🍽️</button>
+  <div class="error" id="error"></div>
+  <button class="link" onclick="show('s-diet')">← Change veg / non-veg</button>
+</div>
+
+<!-- Screen 4: Loading -->
+<div class="screen" id="s-loading">
+  <div class="big-emoji">👨‍🍳</div>
+  <p class="loader">Cooking up your recipe...</p>
+</div>
+
+<!-- Screen 5: Recipe -->
+<div class="screen" id="s-recipe">
+  <div class="card" id="recipeCard"></div>
+  <div class="enjoy">Enjoy your meal! 😋🍽️</div>
+  <button class="main big" onclick="startOver()">Cook something else</button>
+</div>
+
+<script>
+  let diet = '';
+  let ingredients = [];
+
+  // Show one screen, hide the others
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // After 3.5 seconds the welcome screen moves to the diet screen
+  setTimeout(() => show('s-diet'), 3500);
+
+  function chooseDiet(d) {
+    diet = d;
+    show('s-ingredients');
+    document.getElementById('ing').focus();
+  }
+
+  // Add one ingredient to the list
+  function addIngredient() {
+    const input = document.getElementById('ing');
+    const value = input.value.trim();
+    if (!value) return;
+    if (ingredients.length >= 15) { setError('Maximum 15 ingredients.'); return; }
+    ingredients.push(value);
+    input.value = '';
+    setError('');
+    drawChips();
+    input.focus();
+  }
+
+  // Pressing Enter also adds the ingredient
+  document.getElementById('ing').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addIngredient();
+  });
+
+  function removeIngredient(i) {
+    ingredients.splice(i, 1);
+    drawChips();
+  }
+
+  // Draw the ingredient chips
+  function drawChips() {
+    document.getElementById('chips').innerHTML = ingredients
+      .map((x, i) => '<div class="chip">' + (i + 1) + '. ' + esc(x) +
+                     '<b onclick="removeIngredient(' + i + ')">×</b></div>').join('');
+    document.getElementById('goBtn').disabled = ingredients.length === 0;
+  }
+
+  function setError(msg) { document.getElementById('error').textContent = msg; }
+
+  // Send the choices to our "kitchen" (api/generate.js)
+  async function getRecipe() {
+    setError('');
+    show('s-loading');
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ diet, ingredients })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+      showRecipe(data);
+    } catch (e) {
+      show('s-ingredients');
+      setError(e.message);
+    }
+  }
+
+  // Show the recipe card
+  function showRecipe(r) {
+    const ings = (r.ingredients || []).map(x => '<li>' + esc(x) + '</li>').join('');
+    const steps = (r.steps || []).map(x => '<li>' + esc(x) + '</li>').join('');
+    document.getElementById('recipeCard').innerHTML =
+      '<span class="badge">⏱️ ' + esc(r.time) + '</span>' +
+      '<h2 style="margin:4px 0">' + esc(r.title) + '</h2>' +
+      '<h3>Ingredients</h3><ul>' + ings + '</ul>' +
+      '<h3>Steps</h3><ol>' + steps + '</ol>';
+    show('s-recipe');
+  }
+
+  // Go back to the start (keeps the veg / non-veg choice screen)
+  function startOver() {
+    ingredients = [];
+    drawChips();
+    setError('');
+    show('s-diet');
+  }
+
+  // Makes text safe to show on a page
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+</script>
+</body>
+</html>
