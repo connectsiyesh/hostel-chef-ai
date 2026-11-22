@@ -10,6 +10,7 @@ module.exports = async function handler(req, res) {
 
   const body = req.body || {};
   const diet = body.diet === 'veg' ? 'veg' : 'non-veg';
+  const spice = ['mild', 'medium', 'spicy'].includes(body.spice) ? body.spice : 'medium';
   const ingredients = Array.isArray(body.ingredients)
     ? body.ingredients.map(x => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 15)
     : [];
@@ -26,15 +27,17 @@ module.exports = async function handler(req, res) {
 
   // Our instruction (prompt) to the AI
   const prompt =
-    'You are a friendly hostel cooking helper. Create ONE simple recipe a student can cook with ' +
-    'basic hostel equipment (a stove or induction and a pan).\n' +
+    'You are a friendly hostel cooking helper. Create exactly 3 DIFFERENT simple recipes a student can cook ' +
+    'with basic hostel equipment (a stove or induction and a pan).\n' +
     'Diet: ' + diet + '. ' +
     (diet === 'veg' ? 'Do NOT use meat, fish or eggs.\n' : 'Meat, fish or eggs are allowed.\n') +
+    'Spice level: ' + spice + '. Adjust the chilli and spices in every recipe to match this level.\n' +
     'Main ingredients the student has: ' + ingredients.join(', ') + '.\n' +
     'You may also assume basic items like salt, oil, water and common spices.\n' +
-    'Return JSON with: "title" (string), "time" (string, approximate total cooking time like "20 minutes"), ' +
-    '"ingredients" (array of strings with rough quantities), and "steps" (array of short, clear strings, ' +
-    '5 to 8 steps). Keep it simple and beginner friendly.';
+    'Return JSON in this shape: {"recipes": [ {"title": string, "time": string (approximate total cooking time ' +
+    'like "20 minutes"), "ingredients": array of strings with rough quantities, "steps": array of short clear ' +
+    'strings, 5 to 7 steps} ]}. The "recipes" array must have exactly 3 items. Keep everything simple and ' +
+    'beginner friendly.';
 
   try {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent';
@@ -55,11 +58,11 @@ module.exports = async function handler(req, res) {
 
     // Pull the AI's text out of the reply and turn it into an object
     const text = data.candidates[0].content.parts[0].text;
-    const recipe = JSON.parse(text);
-    if (!recipe.title || !Array.isArray(recipe.steps)) {
+    const result = JSON.parse(text);
+    if (!Array.isArray(result.recipes) || result.recipes.length === 0) {
       return res.status(500).json({ error: 'The AI gave a strange answer. Please try again.' });
     }
-    return res.status(200).json(recipe);
+    return res.status(200).json({ recipes: result.recipes.slice(0, 3) });
   } catch (e) {
     return res.status(500).json({ error: 'Could not generate. Please try again.' });
   }
